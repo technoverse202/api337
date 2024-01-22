@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '*'
+
+env:
+  GIT_DEPTH: 10
+  GIT_CLEAN_FLAGS: none
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: ${{ env.GIT_DEPTH }}
+    
+      - name: Analyze
+        run: # Add analyze steps here
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: ${{ env.GIT_DEPTH }}
+    
+      - name: Build
+        run: |
+          if [ "$BUILD_TYPE" == "native" ]; then
+            echo "native"
+            if [ "$IMAGE_TYPE" == "docker" ]; then
+              mvn clean install -Pnative -Dquarkus.native.container-runtime=docker -Dquarkus.profile=${BUILD_PROFILE}
+              mvn k8s:build
+              mvn k8s:resource -Pdev
+              mvn k8s:apply
+            else
+              mvn clean install -Pnative -Dquarkus.profile=${BUILD_PROFILE}
+              mvn k8s:build
+              mvn k8s:resource -Pdev
+              mvn k8s:apply
+            fi
+          else
+            if [ "$IMAGE_TYPE" == "docker" ]; then
+              echo "docker"
+              mvn clean install -Dquarkus.container-image.build=true -Dquarkus.profile=${BUILD_PROFILE}
+              mvn k8s:build
+              mvn k8s:resource -Pdev
+              mvn k8s:apply
+            else
+              mvn clean package
+              mvn k8s:build
+              mvn k8s:resource -Pdev
+              mvn k8s:apply
+            fi
+          fi
+
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: ${{ env.GIT_DEPTH }}
+    
+      - name: Deploy
+        run: |
+          if [ "$HELM" == "true" ]; then
+            cd ${{ env.JKUBE_HELM_DIR }}
+            helm install quarkus openshift
+          else
+            mvn k8s:apply
+          fi
+
